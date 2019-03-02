@@ -9,3 +9,6 @@ The layout of the app displays
 5. Stop button: To stop the event
 
 The app when started checks the distance between the current location and destination when the location of the rider reaches nearer to the recipient by 1000 meters then notification(in the form of text message) is triggered to the recipient.
+
+NOTE: SMS charges apply based on the network operator.
+      You need to provide Google map api key.
