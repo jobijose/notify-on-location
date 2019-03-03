@@ -2,12 +2,15 @@ package my.project;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
@@ -28,8 +31,13 @@ import android.support.v4.app.NotificationManagerCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
 import android.telephony.SmsManager;
+import android.text.TextUtils;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -59,9 +67,9 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private static final int PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
     private static final long GPS_TIME_INTERVAL = 10000;
     private static final float GPS_DISTANCE = 100f;
-    private static final float NOTIFY_DISTANCE = 1000f;
+    private static final float NOTIFY_DISTANCE = 500f;
     private static final int PERMISSION_SEND_SMS = 1;
-    private static final int HANDLER_DELAY = 1000*10; // 10 sec delay
+    private static final int HANDLER_DELAY = 1000*20; // 20 sec delay
     private static final int SMS_FREQUENCY = 3;
     private static final int NOTIFICATION_ID = 10303;
     private static final String KEY_CAMERA_POSITION = "camera_position";
@@ -89,6 +97,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
     private Intent serviceIntent;
     private NotificationManagerCompat notificationManager;
     private Notification appNotification;
+    private String notifyTextMessage;
+    private float notifyDistance;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -98,6 +108,10 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
             mCameraPosition = savedInstanceState.getParcelable(KEY_CAMERA_POSITION);
         }
         setContentView(R.layout.activity_scrolling);
+
+        Toolbar tool_bar = findViewById(R.id.tool_bar);
+        setSupportActionBar(tool_bar);
+
         textPlacePicker = findViewById(R.id.text_place_picker);
         textContact = findViewById(R.id.contact_number);
         startButton = findViewById(R.id.action_start);
@@ -116,6 +130,9 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         String contactNum = config.getString(getString(R.string.contact_number), "");
         if(!"".equals(contactNum))
            textContact.setText(contactNum);
+
+        notifyDistance = Float.parseFloat(getConfigByKey(getString(R.string.distance_config), String.valueOf(NOTIFY_DISTANCE)));
+        notifyTextMessage = getConfigByKey(getString(R.string.text_msg_config), getString(R.string.notification_text_message));
     }
 
     public void callPlacePicker(View view) {
@@ -268,7 +285,7 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
     public void sendNotification() {
-        String messageToSend = getString(R.string.notification_text_message);
+        String messageToSend = !TextUtils.isEmpty(notifyTextMessage)? notifyTextMessage : getString(R.string.notification_text_message);
         if(textContact != null) {
             Log.i(TAG, textContact.getText().toString());
             String number = textContact.getText().toString();
@@ -387,7 +404,8 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                 Location myLocation = obtainLocation();
                 if (myLocation != null && destination != null) {
                     double distance = myLocation.distanceTo(destination);
-                    if (distance <= NOTIFY_DISTANCE) {
+                    float distanceThreshold = notifyDistance > 0 ? notifyDistance : NOTIFY_DISTANCE;
+                    if (distance <= distanceThreshold) {
                         if (smsFreq < SMS_FREQUENCY) {
                             sendNotification();
                             smsFreq++;
@@ -397,5 +415,84 @@ public class MainActivity extends AppCompatActivity implements OnMapReadyCallbac
                 handler.postDelayed(this, HANDLER_DELAY);
             }
         }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_scrolling, menu);
+        return true;
+    }
+
+    public void settingsDialog(MenuItem item){
+        onCreateDialog().show();
+    }
+
+    public Dialog onCreateDialog() {
+        final Dialog dialog = new Dialog(this);
+        dialog.setContentView(R.layout.settings_dialog);
+        final EditText notifyDistance = dialog.findViewById(R.id.text_distance);
+        final EditText notifyTextMsg = dialog.findViewById(R.id.text_message_content);
+        getConfig(notifyDistance, notifyTextMsg);
+        final Button save = dialog.findViewById(R.id.save_settings);
+        final Button cancel = dialog.findViewById(R.id.cancel_settings);
+
+        save.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                String distanceVal = notifyDistance.getText().toString();
+                float distance = 0f;
+                if(!"".equals(distanceVal))
+                    distance = Float.parseFloat(distanceVal);
+                String textMsgVal = notifyTextMsg.getText().toString();
+                saveConfig(distance, textMsgVal);
+                dialog.dismiss();
+            }
+        });
+
+        cancel.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+               dialog.dismiss();
+            }
+        });
+
+        return dialog;
+    }
+
+    private void getConfig(EditText notifyDistance, EditText notifyTextMsg)
+    {
+        SharedPreferences config = getSharedPreferences(getString(R.string.app_config), Context.MODE_PRIVATE);
+        String distanceConfig = config.getString(getString(R.string.distance_config), String.valueOf(NOTIFY_DISTANCE));
+        String textMsgConfig = config.getString(getString(R.string.text_msg_config), getString(R.string.notification_text_message));
+        if("".equals(distanceConfig))
+            distanceConfig = String.valueOf(NOTIFY_DISTANCE);
+        if("".equals(textMsgConfig))
+            textMsgConfig = getString(R.string.notification_text_message);
+
+        notifyDistance.setText(distanceConfig);
+        notifyTextMsg.setText(textMsgConfig);
+    }
+
+    private void saveConfig(float distanceConfig, String textMsgConfig)
+    {
+        SharedPreferences config = getSharedPreferences(getString(R.string.app_config), Context.MODE_PRIVATE);
+
+        if(distanceConfig <= 0f)
+            distanceConfig = NOTIFY_DISTANCE;
+        if("".equals(textMsgConfig))
+            textMsgConfig = getString(R.string.notification_text_message);
+        SharedPreferences.Editor editor = config.edit();
+        editor.putString(getString(R.string.distance_config), String.valueOf(distanceConfig));
+        editor.putString(getString(R.string.text_msg_config), textMsgConfig);
+        editor.commit();
+    }
+
+    private String getConfigByKey(String key, String defaultValue) {
+
+        SharedPreferences config = getSharedPreferences(getString(R.string.app_config), Context.MODE_PRIVATE);
+        String value = config.getString(key, defaultValue);
+        if("".equals(value))
+            return defaultValue;
+        return value;
     }
 }
