@@ -12,3 +12,4 @@ The app when started checks the distance between the current location and destin
 
 NOTE: SMS charges apply based on the network operator.
       You need to provide Google map api key.
+      Developed and tested in Android 8.0(Oreo) - API Level: 26
